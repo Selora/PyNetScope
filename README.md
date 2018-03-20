@@ -1,2 +1,2 @@
 # PyNetScope
-Library to help with extarnal pentest scope
+Library to help with external pentest scope
