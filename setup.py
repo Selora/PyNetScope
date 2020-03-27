@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='PyNetScope',
-    version='0.1.1',
+    version='0.1.2',
     packages=['PyNetScope', 'PyNetScope.tests'],
     url='https://github.com/Selora/PyNetScope',
     license='BSD-2',
