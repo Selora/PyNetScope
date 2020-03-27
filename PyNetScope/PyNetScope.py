@@ -1,7 +1,7 @@
 import re
 import socket
 import csv
-from netaddr import IPNetwork
+from netaddr import IPNetwork, IPSet, IPRange
 
 
 class Scope:
@@ -37,8 +37,8 @@ class Scope:
 
     def get_expanded_ip_list(self):
         ip_list = [x for x in self.ip_list]
-        ip_netblocks = [ip for nb in self.netblock_list for ip in Scope.expend_netblock(nb)]
-        ip_netrange = [ip for nr in self.netrange_list for ip in Scope.expend_netrange(nr)]
+        ip_netblocks = [ip for nb in self.netblock_list for ip in Scope.expand_netblock(nb)]
+        ip_netrange = [ip for nr in self.netrange_list for ip in Scope.expand_netrange(nr)]
 
         ip_list = list(set(ip_list + ip_netrange + ip_netblocks))
         ip_list.sort(key=lambda s: list(map(int, s.split('.'))))
@@ -107,10 +107,15 @@ class Scope:
 
     @staticmethod
     def is_ip(ip):
-        try:
-            socket.inet_aton(ip)
-            return True
-        except socket.error:
+        # inet_aton is lax. If there's space and garbage after, it'll cast the first half as an IP
+        ip_match = re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip.strip())
+        if ip_match:
+            try:
+                socket.inet_aton(ip)
+                return True
+            except socket.error:
+                return False
+        else:
             return False
 
     @staticmethod
@@ -155,12 +160,34 @@ class Scope:
 
 
     @staticmethod
-    def is_netrange(hostname):
+    def _netrange_ip_to_ip(hostname):
         try:
             if '-' in hostname:
-                (ip_addr, ip_range) = hostname.split('-')
-                if Scope._is_int(ip_range) and Scope.is_ip(ip_addr):
-                    return True
+                (ip_addr_1, ip_addr_2_or_range) = (x.strip() for x in hostname.split('-'))
+                if Scope.is_ip(ip_addr_2_or_range):
+                    if Scope.is_ip(ip_addr_1):
+                        return True
+            return False
+        except Exception as e:
+            return False
+
+    @staticmethod
+    def _netrange_ip_to_int(hostname):
+        try:
+            if '-' in hostname:
+                (ip_addr_1, ip_addr_2_or_range) = (x.strip() for x in hostname.split('-'))
+                if Scope._is_int(ip_addr_2_or_range):
+                    if Scope.is_ip(ip_addr_1):
+                        return True
+            return False
+        except:
+            return False
+
+    @staticmethod
+    def is_netrange(hostname):
+        try:
+            if Scope._netrange_ip_to_int(hostname) or Scope._netrange_ip_to_ip(hostname):
+                return True
             return False
 
         except:
@@ -175,24 +202,29 @@ class Scope:
             return False
 
     @staticmethod
-    def expend_netblock(netblock):
+    def expand_netblock(netblock):
         return [str(ip) for ip in IPNetwork(netblock)]
 
     @staticmethod
-    def expend_netrange(ip_range):
-        if '-' not in ip_range:
+    def expand_netrange(ip_range):
+        if not Scope._netrange_ip_to_ip(ip_range) and not Scope._netrange_ip_to_int(ip_range):
             raise ValueError(
-                        str(ip_range) + ' is not an ip range (ex: 1.1.1.1-255)')
-        (ip_addr, ip_range_end) = ip_range.split('-')
-        if not Scope._is_int(ip_range_end):
-            raise ValueError(
-                        str(ip_range) + ' is not an ip range (ex: 1.1.1.1-255)')
+                        str(ip_range) + ' is not an ip range (ex: 1.1.1.1-255, 1.1.1.1-2.2.2.2)')
 
+        (ip_addr, ip_range_end) = (x.strip() for x in ip_range.split('-'))
+        if Scope._netrange_ip_to_int(ip_range):
+            return Scope._get_netrange_from_ip_to_int(ip_addr, ip_range_end)
+        else:
+            return [str(x) for x in IPSet(IPRange(ip_addr, ip_range_end))]
+
+
+    @staticmethod
+    def _get_netrange_from_ip_to_int(ip_addr, ip_range_end):
         ip_bytes = ip_addr.split('.')
         ip_list = [ip_addr]
         ip_start = int(ip_bytes[-1])
         ip_end = int(ip_range_end)
-        for ip_suffix in range(ip_start+1, ip_end+1):
+        for ip_suffix in range(ip_start + 1, ip_end + 1):
             ip = str(ip_bytes[0] +
                      '.' + ip_bytes[1] +
                      '.' + ip_bytes[2] +

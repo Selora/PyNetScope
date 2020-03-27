@@ -1,23 +1,25 @@
-from PyNetScope import Scope
+from PyNetScope.PyNetScope import Scope
 
 from unittest import TestCase
 import netaddr
 
 
 class TestScope(TestCase):
-    def test_get_expanded_ip_list(self):
-        self.fail()
+    #def test_get_expanded_ip_list(self):
+    #    self.fail()
 
-    def test_read_scope_from_args(self):
-        self.fail()
+    #def test_read_scope_from_args(self):
+    #    self.fail()
 
     def test_read_scope_from_file(self):
-        scope = Scope.read_scope_from_file("tests/test_scope.txt")
+        scope = Scope.read_scope_from_file("test_scope.txt")
 
         ip_list = scope.get_expanded_ip_list()
         ip_golden_list = [str(ip) for ip in netaddr.IPNetwork('10.0.0.0/24')]
+        ip_golden_list += ['10.1.0.1', '10.1.0.2']
         ip_golden_list += [str(ip) for ip in netaddr.IPNetwork('192.168.1.0/25')] + ['192.168.1.128']
         ip_golden_list += ['1.1.1.1']
+        ip_golden_list += [str(ip) for ip in netaddr.IPSet(netaddr.IPRange('1.2.3.4', '1.2.4.5'))]
 
         ip_list.sort(reverse=True)
         ip_golden_list.sort(reverse=True)
@@ -42,12 +44,12 @@ class TestScope(TestCase):
 
         golden_netblocks = [
             ' 10.1.0.1/16 ',
-            '12.11.2/30 '
         ]
 
         golden_netranges = [
             '192.168.5.1-5',
-            '2.8.5.1-5'
+            '2.8.5.1-5',
+            '1.2.3.4- 1.2.4.5'
         ]
 
         # Some wierd or funky hostnames, etc
@@ -78,20 +80,20 @@ class TestScope(TestCase):
 
 
 
-    def test_is_ip(self):
-        self.fail()
+    #def test_is_ip(self):
+    #    self.fail()
 
-    def test_is_hostname(self):
-        self.fail()
+    #def test_is_hostname(self):
+    #    self.fail()
 
-    def test_is_netblock(self):
-        self.fail()
+    #def test_is_netblock(self):
+    #    self.fail()
 
-    def test_is_netrange(self):
-        self.fail()
+    #def test_is_netrange(self):
+    #    self.fail()
 
-    def test_expend_netblock(self):
-        self.fail()
+    #def test_expand_netblock(self):
+    #    self.fail()
 
-    def test_expend_netrange(self):
-        self.fail()
+    #def test_expand_netrange(self):
+    #    self.fail()
