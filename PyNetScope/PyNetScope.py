@@ -1,7 +1,8 @@
 import re
 import socket
 import csv
-from netaddr import IPNetwork, IPSet, IPRange
+import dns
+from netaddr import IPNetwork, IPSet, IPRange, IPAddress, IPGlob
 
 
 class Scope:
@@ -14,33 +15,92 @@ class Scope:
     FQDN
     """
 
-    def __init__(self, ip_list=[], hostname_list=[], netblock_list=[], netrange_list=[]):
+    def __init__(self, ip_list=[], hostname_list=[], netblock_list=[], netrange_list=[], auto_coalesce_ip=True,
+                 auto_resolve_hostnames=False):
+        self._auto_coalesce = auto_coalesce_ip
+        self._auto_resolve_hostnames = auto_resolve_hostnames
+
         not_ip = [x for x in ip_list if not Scope.is_ip(x)]
         if not_ip:
             raise ValueError('Value(s) ' + str(not_ip) + ' are provided as IP but cannot be casted as such')
-        self.ip_list = ip_list
+        self._ip_list = IPSet(ip_list)
 
         not_hostname = [x for x in hostname_list if not Scope.is_hostname(x)]
         if not_hostname:
             raise ValueError('Value(s) ' + str(not_hostname) + ' are provided as hostnames but cannot be casted as such')
-        self.hostname_list = hostname_list
+        self._hostname_list = set(hostname_list)
 
         not_netblock = [x for x in netblock_list if not Scope.is_netblock(x)]
         if not_netblock:
             raise ValueError('Value(s) ' + str(not_netblock) + ' are provided as netblocks but cannot be casted as such')
-        self.netblock_list = netblock_list
+        self._netblock_list = set(IPNetwork(x) for x in set(netblock_list))
 
         not_netrange = [x for x in netrange_list if not Scope.is_netrange(x)]
         if not_netrange:
             raise ValueError('Value(s) ' + str(not_netrange) + ' are provided as netranges but cannot be casted as such')
-        self.netrange_list = netrange_list
+        self._netrange_list = set()
+        for netrange in set(netrange_list):
+            if self._netrange_ip_to_int(netrange):
+                self._netrange_list.add(IPGlob(netrange))
+            else:
+                (ip1, ip2) = (x.strip() for x in netrange.split('-'))
+                self._netrange_list.add(IPRange(ip1, ip2))
+
+        if self._auto_resolve_hostnames:
+            self._resolve_hostnames()
+
+        if self._auto_coalesce:
+            self._coalesce_ip_list()
+
+    @property
+    def ip_list(self):
+        return tuple(str(ip) for ip in self._ip_list)
+
+    @property
+    def hostname_list(self):
+        return tuple(str(hostname) for hostname in self._hostname_list)
+
+    @property
+    def netblock_list(self):
+        return tuple(str(netblock) for netblock in self._netblock_list)
+
+    @property
+    def netrange_list(self):
+        return tuple(str(netrange) for netrange in self._netrange_list)
+
+    def _coalesce_ip_list(self):
+        """Merge IPs in appropriate netblocks/netranges, if possible, and remove them from ip_list"""
+        for ip in self._ip_list:
+            if ip in self._netrange_list:
+                self._ip_list.remove(ip)
+            if ip in self._netblock_list:
+                self._ip_list.remove(ip)
+
+    def _resolve_hostnames(self):
+        for hostname in self.hostname_list:
+            for result in dns.resolver.query(hostname, 'A'):
+                # Add IP if it's not already in the IP list.
+                # Will be coalesced later if flag enabled
+                if str(result) not in self._ip_list:
+                    self._ip_list.add(str(result))
+
+    def is_ip_in_scope(self, ip):
+        if ip in self._ip_list:
+            return True
+        for netblock in self._netblock_list:
+            if ip in IPSet(netblock):
+                return True
+        for netrange in self._netrange_list:
+            if ip in IPSet(netrange):
+                return True
+
+        return False
 
     def get_expanded_ip_list(self):
-        ip_list = [x for x in self.ip_list]
-        ip_netblocks = [ip for nb in self.netblock_list for ip in Scope.expand_netblock(nb)]
-        ip_netrange = [ip for nr in self.netrange_list for ip in Scope.expand_netrange(nr)]
+        ip_netblocks = tuple(str(ip) for nb in self._netblock_list for ip in nb)
+        ip_netrange = tuple(str(ip) for nr in self._netrange_list for ip in nr)
 
-        ip_list = list(set(ip_list + ip_netrange + ip_netblocks))
+        ip_list = list(set(self.ip_list + ip_netrange + ip_netblocks))
         ip_list.sort(key=lambda s: list(map(int, s.split('.'))))
 
         return ip_list
@@ -145,11 +205,11 @@ class Scope:
             return False
 
     @staticmethod
-    def is_netblock(hostname):
+    def is_netblock(netblock):
         try:
 
-            if '/' in hostname:
-                (ip_addr, cidr) = hostname.split('/')
+            if '/' in netblock:
+                (ip_addr, cidr) = netblock.split('/')
                 if Scope._is_int(cidr) and Scope.is_ip(ip_addr):
                     return True
 
@@ -160,10 +220,10 @@ class Scope:
 
 
     @staticmethod
-    def _netrange_ip_to_ip(hostname):
+    def _netrange_ip_to_ip(netrange):
         try:
-            if '-' in hostname:
-                (ip_addr_1, ip_addr_2_or_range) = (x.strip() for x in hostname.split('-'))
+            if '-' in netrange:
+                (ip_addr_1, ip_addr_2_or_range) = (x.strip() for x in netrange.split('-'))
                 if Scope.is_ip(ip_addr_2_or_range):
                     if Scope.is_ip(ip_addr_1):
                         return True
@@ -172,10 +232,10 @@ class Scope:
             return False
 
     @staticmethod
-    def _netrange_ip_to_int(hostname):
+    def _netrange_ip_to_int(netrange):
         try:
-            if '-' in hostname:
-                (ip_addr_1, ip_addr_2_or_range) = (x.strip() for x in hostname.split('-'))
+            if '-' in netrange:
+                (ip_addr_1, ip_addr_2_or_range) = (x.strip() for x in netrange.split('-'))
                 if Scope._is_int(ip_addr_2_or_range):
                     if Scope.is_ip(ip_addr_1):
                         return True
@@ -184,9 +244,9 @@ class Scope:
             return False
 
     @staticmethod
-    def is_netrange(hostname):
+    def is_netrange(netrange):
         try:
-            if Scope._netrange_ip_to_int(hostname) or Scope._netrange_ip_to_ip(hostname):
+            if Scope._netrange_ip_to_int(netrange) or Scope._netrange_ip_to_ip(netrange):
                 return True
             return False
 

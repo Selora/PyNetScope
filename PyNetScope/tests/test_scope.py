@@ -2,6 +2,7 @@ from PyNetScope.PyNetScope import Scope
 
 from unittest import TestCase
 import netaddr
+import dns.resolver
 
 
 class TestScope(TestCase):
@@ -10,6 +11,20 @@ class TestScope(TestCase):
 
     #def test_read_scope_from_args(self):
     #    self.fail()
+
+    def test_resolver(self):
+        # XKCD IPs
+        ip_golden_list = [str(x) for x in dns.resolver.query('xkcd.com', 'A')]
+        self.assertTrue(len(ip_golden_list) == 4, msg="XKCD used to be 4 IPs/record. This will mess other test cases")
+
+        scope = Scope(ip_list=ip_golden_list[0:2], hostname_list=['xkcd.com'], auto_coalesce_ip=True,
+                      auto_resolve_hostnames=True)
+        
+        ip_list = scope.get_expanded_ip_list()
+        ip_list.sort(reverse=True)
+        ip_golden_list.sort(reverse=True)
+        self.assertEqual(len(ip_list), len(ip_golden_list), msg="Problem coalescing hostnames to IP")
+        self.assertEqual(ip_list, ip_golden_list, msg="Problem resolving correctly?")
 
     def test_read_scope_from_file(self):
         scope = Scope.read_scope_from_file("test_scope.txt")
@@ -25,6 +40,8 @@ class TestScope(TestCase):
         ip_golden_list.sort(reverse=True)
         self.assertEqual(len(ip_list), len(ip_golden_list), msg="Problem importing netblocks or IP addresses")
         self.assertEqual(ip_list, ip_golden_list, msg="Problem importing netblocks or IP addresses")
+        self.assertTrue(scope.is_ip_in_scope('1.1.1.1'), msg="Scope validation not working")
+        self.assertTrue(scope.is_ip_in_scope('1.2.3.124'), msg="Scope validation not working")
 
     def test__parse_scope_entry(self):
         hostname_list = []
