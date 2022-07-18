@@ -6,7 +6,7 @@ with open('requirements.txt') as f:
 
 setup(
     name='PyNetScope',
-    version='0.1.3',
+    version='0.1.4',
     packages=['PyNetScope', 'PyNetScope.tests'],
     url='https://github.com/Selora/PyNetScope',
     license='BSD-2',

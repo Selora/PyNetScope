@@ -1,29 +1,37 @@
-import PyNetScope
+import PyNetScope.PyNetScope as PyNetScope
 import argparse
+import sys
 
 def get_argparser():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
+    scope_input_group = parser.add_mutually_exclusive_group()
+    scope_input_group.add_argument(
         '-f',
         '--scope-file',
         type=argparse.FileType('r')
     )
-    parser.add_argument(
+    scope_input_group.add_argument(
         '-s',
         '--scope',
         type=str,
         help='Scope, comma-separated. Hostname, ip list, netblocs (CIDR) and netranges.'
     )
     parser.add_argument(
-        'Host-To-Validate',
+        'ipv4',
         type=str,
-        help='FQDN or IP'
+        help='IPv4'
     )
 
     return parser
 
-def __main__():
-
+def main():
     args = get_argparser().parse_args()
-    
-    print("Hello!")
+    if args.scope:
+        scope = PyNetScope.Scope.read_scope_from_args(args.scope)
+    else:
+        scope = PyNetScope.Scope.read_scope_from_file(args.scope_file)
+
+    if scope.is_ip_in_scope(args.ipv4):
+        print("{} in scope".format(args.ipv4))
+    else:
+        print("{} not in scope".format(args.ipv4))
