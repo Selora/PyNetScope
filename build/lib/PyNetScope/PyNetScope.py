@@ -336,4 +336,4 @@ class ScopeValidator:
                     status = 'Extended scope (new ip)'
 
 
-                out_csv.writerow([hostname, ip, status])
+                writerow([hostname, ip, status])

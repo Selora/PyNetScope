@@ -1,0 +1,6 @@
+.eggs/*
+PyNetScope/__pycache__/*
+PyNetScope/tests/__pycache__/*
+PyNetScope.egg-info
+base.condaenv
+PyNetScope.code-workspace
